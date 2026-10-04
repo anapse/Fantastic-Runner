@@ -54,6 +54,43 @@ export class GameEngine {
   public readonly focalLength = 360;
   public readonly groundYOffset = 740; // Feet positioned cleanly above bottom margin with full visibility
 
+  // Aiming Reticle / Crosshair (in Canvas Coordinates 450x800)
+  public aimX = 225;
+  public aimY = 350;
+
+  public setAimPosition(screenX: number, screenY: number) {
+    this.aimX = Math.max(10, Math.min(this.width - 10, screenX));
+    this.aimY = Math.max(40, Math.min(this.height - 100, screenY));
+  }
+
+  public getAimDirection(
+    aimScreenX: number,
+    aimScreenY: number,
+    startX: number,
+    startY: number,
+    startZ: number,
+    targetDepth = 550
+  ): { dirX: number; dirY: number; dirZ: number; targetWx: number; targetWy: number; targetWz: number } {
+    const scale = this.focalLength / (this.focalLength + Math.max(targetDepth, 1));
+    const targetWx = (aimScreenX - this.vanishingX) / scale;
+    const targetWy = this.groundYOffset - this.vanishingY - (aimScreenY - this.vanishingY) / scale;
+    const targetWz = targetDepth;
+
+    const dx = targetWx - startX;
+    const dy = targetWy - startY;
+    const dz = targetWz - startZ;
+
+    const len = Math.hypot(dx, dy, dz) || 1;
+    return {
+      dirX: dx / len,
+      dirY: dy / len,
+      dirZ: dz / len,
+      targetWx,
+      targetWy,
+      targetWz,
+    };
+  }
+
   // World Speed & Progression
   public worldSpeed = 15;
   public distance = 0; // in meters
@@ -157,6 +194,8 @@ export class GameEngine {
     this.isGameOver = false;
     this.nextBossDistance = 1000;
     this.spawnTimer = 0;
+    this.aimX = 225;
+    this.aimY = 350;
   }
 
   public start() {
@@ -555,18 +594,21 @@ export class GameEngine {
 
     const handX = this.player.x + 28;
     const handY = this.player.y + 38;
-    const convergeVx = -handX * 0.035;
+    const handZ = 15;
 
-    // Muzzle flash particle burst at the weapon
+    // Calculate aim direction strictly towards the crosshair in 3D tunnel space
+    const aimDir = this.getAimDirection(this.aimX, this.aimY, handX, handY, handZ, 550);
+
+    // Muzzle flash particle burst at the weapon towards aim direction
     for (let m = 0; m < 6; m++) {
       this.particles.push({
-        x: handX + (Math.random() - 0.5) * 10,
-        y: handY + (Math.random() - 0.5) * 10,
-        z: 15,
-        vx: (Math.random() - 0.5) * 8,
-        vy: (Math.random() - 0.5) * 8,
-        vz: Math.random() * 12 + 6,
-        color: '#00f5ff',
+        x: handX + (Math.random() - 0.5) * 8,
+        y: handY + (Math.random() - 0.5) * 8,
+        z: handZ,
+        vx: aimDir.dirX * 16 + (Math.random() - 0.5) * 6,
+        vy: aimDir.dirY * 16 + (Math.random() - 0.5) * 6,
+        vz: aimDir.dirZ * 16 + Math.random() * 8,
+        color: Math.random() < 0.5 ? '#ffffff' : '#facc15',
         size: Math.random() * 4 + 2,
         alpha: 1,
         life: 0,
@@ -575,71 +617,76 @@ export class GameEngine {
     }
 
     if (isMultiShot || weapon === 'SPREAD') {
-      // 3-way spread with bright electric cyan-blue bullets
-      [-10, 0, 10].forEach((angleVx) => {
+      // 3-way spread around the aim point
+      const speed = 40;
+      [-40, 0, 40].forEach((offsetScreenX) => {
+        const spreadAim = this.getAimDirection(this.aimX + offsetScreenX, this.aimY, handX, handY, handZ, 550);
         this.playerProjectiles.push({
           id: Math.random().toString(),
           isPlayer: true,
           x: handX,
           y: handY,
-          z: 15,
-          vx: convergeVx + angleVx,
-          vy: 0,
-          vz: 38,
-          radius: 16,
+          z: handZ,
+          vx: spreadAim.dirX * speed,
+          vy: spreadAim.dirY * speed,
+          vz: spreadAim.dirZ * speed,
+          radius: 17,
           damage: 15,
           type: 'SPREAD',
-          color: '#00f5ff',
+          color: '#fbbf24',
           active: true,
         });
       });
     } else if (weapon === 'BEAM') {
+      const speed = 56;
       this.playerProjectiles.push({
         id: Math.random().toString(),
         isPlayer: true,
         x: handX,
         y: handY,
-        z: 15,
-        vx: convergeVx,
-        vy: 0,
-        vz: 52,
+        z: handZ,
+        vx: aimDir.dirX * speed,
+        vy: aimDir.dirY * speed,
+        vz: aimDir.dirZ * speed,
         radius: 20,
         damage: 40,
         type: 'BEAM',
-        color: '#00f5ff',
+        color: '#fef08a',
         active: true,
       });
     } else if (weapon === 'PLASMA') {
+      const speed = 34;
       this.playerProjectiles.push({
         id: Math.random().toString(),
         isPlayer: true,
         x: handX,
         y: handY,
-        z: 15,
-        vx: convergeVx,
-        vy: 0,
-        vz: 32,
-        radius: 24,
+        z: handZ,
+        vx: aimDir.dirX * speed,
+        vy: aimDir.dirY * speed,
+        vz: aimDir.dirZ * speed,
+        radius: 26,
         damage: 60,
         type: 'PLASMA',
-        color: '#38bdf8',
+        color: '#fb923c',
         active: true,
       });
     } else {
       // BASIC
+      const speed = 42;
       this.playerProjectiles.push({
         id: Math.random().toString(),
         isPlayer: true,
         x: handX,
         y: handY,
-        z: 15,
-        vx: convergeVx,
-        vy: 0,
-        vz: 40,
-        radius: 16,
+        z: handZ,
+        vx: aimDir.dirX * speed,
+        vy: aimDir.dirY * speed,
+        vz: aimDir.dirZ * speed,
+        radius: 17,
         damage: 20,
         type: 'BASIC',
-        color: '#00f5ff',
+        color: '#facc15',
         active: true,
       });
     }
@@ -776,9 +823,9 @@ export class GameEngine {
         y: 0,
         z: 1000,
         speedZ: 0,
-        radius: 60,
-        width: 140,
-        height: 140,
+        radius: 70,
+        width: 165,
+        height: 165,
         hp: 20, // 1 direct blaster shot destroys it
         maxHp: 20,
         points: 100,
@@ -795,9 +842,9 @@ export class GameEngine {
           y: 40,
           z: 1000,
           speedZ: 1,
-          radius: 38,
-          width: 86,
-          height: 86,
+          radius: 45,
+          width: 102,
+          height: 102,
           hp: 25,
           maxHp: 25,
           points: 150,
@@ -813,9 +860,9 @@ export class GameEngine {
           z: 1000,
           speedZ: 3.5, // Flying in towards player
           vx: 0,
-          radius: 60,
-          width: 180, // Large, imposing enemy combat ship
-          height: 150,
+          radius: 72,
+          width: 215, // Large, imposing enemy combat ship (+18%)
+          height: 180,
           hp: 20, // Destroyable with 1-2 shots
           maxHp: 20,
           points: 200,
@@ -833,9 +880,9 @@ export class GameEngine {
           y: 0,
           z: 1000,
           speedZ: 0,
-          radius: 36,
-          width: 80,
-          height: 80,
+          radius: 42,
+          width: 95,
+          height: 95,
           hp: 20,
           maxHp: 20,
           points: 75,
@@ -908,9 +955,9 @@ export class GameEngine {
       y: 60,
       z: 1000,
       speedZ: -4, // stays near horizon and fires
-      radius: 65,
-      width: 140,
-      height: 100,
+      radius: 78,
+      width: 168,
+      height: 120,
       hp: 350,
       maxHp: 350,
       points: 2500,
@@ -1067,6 +1114,11 @@ export class GameEngine {
     if (this.player.invulnerableTimer > 0 && Math.floor(Date.now() / 80) % 2 === 0) {
       ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
       ctx.fillRect(0, 0, width, height);
+    }
+
+    // 5. Draw Aiming Crosshair / Reticle (The player's aiming point)
+    if (!this.isGameOver) {
+      this.renderCrosshair();
     }
   }
 
@@ -1379,6 +1431,75 @@ export class GameEngine {
     ctx.restore();
   }
 
+  private renderCrosshair() {
+    const { ctx, aimX, aimY } = this;
+    ctx.save();
+
+    // 1. Soft glowing aura around reticle
+    const glowGrad = ctx.createRadialGradient(aimX, aimY, 2, aimX, aimY, 22);
+    glowGrad.addColorStop(0, 'rgba(250, 204, 21, 0.45)');
+    glowGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.2)');
+    glowGrad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. High-contrast outer ring: dark border with bright amber/gold line
+    ctx.strokeStyle = '#050814';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 14, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 14, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 3. Four cardinal tick marks with dark outline & bright core
+    const ticks = [
+      { x1: aimX, y1: aimY - 18, x2: aimX, y2: aimY - 6 },
+      { x1: aimX, y1: aimY + 6, x2: aimX, y2: aimY + 18 },
+      { x1: aimX - 18, y1: aimY, x2: aimX - 6, y2: aimY },
+      { x1: aimX + 6, y1: aimY, x2: aimX + 18, y2: aimY },
+    ];
+
+    // Dark outline under-layer
+    ctx.strokeStyle = '#050814';
+    ctx.lineWidth = 3.5;
+    ticks.forEach(({ x1, y1, x2, y2 }) => {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    });
+
+    // Bright white/yellow core
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ticks.forEach(({ x1, y1, x2, y2 }) => {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    });
+
+    // 4. Center Aiming Dot (White with dark outline)
+    ctx.fillStyle = '#050814';
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(aimX, aimY, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   private drawProjectile(p: Projectile, atlas: ReturnType<typeof getSpriteAtlas>) {
     const { ctx } = this;
     const pt = this.project(p.x, p.y, p.z);
@@ -1388,22 +1509,58 @@ export class GameEngine {
     ctx.scale(pt.scale, pt.scale);
 
     if (p.isPlayer) {
-      // Brilliant Glowing Electric Blue Energy Orb (High Contrast with Background)
-      const rad = p.radius || 16;
+      const rad = p.radius || 17;
 
-      // 1. Soft glowing outer electric blue halo
-      ctx.fillStyle = 'rgba(0, 240, 255, 0.35)';
+      // 1. High-contrast weapon colors
+      let glowColor = 'rgba(245, 158, 11, 0.55)'; // amber-gold
+      let bodyColor = '#facc15'; // bright yellow-gold
+
+      if (p.type === 'BEAM') {
+        glowColor = 'rgba(251, 191, 36, 0.7)';
+        bodyColor = '#fef08a';
+      } else if (p.type === 'PLASMA') {
+        glowColor = 'rgba(234, 88, 12, 0.65)'; // blazing neon orange
+        bodyColor = '#fb923c';
+      } else if (p.type === 'SPREAD') {
+        glowColor = 'rgba(245, 158, 11, 0.6)';
+        bodyColor = '#fbbf24';
+      }
+
+      // 2. Trailing speed streak pointing backwards
+      const speed2D = Math.hypot(p.vx, p.vy);
+      if (speed2D > 0.05) {
+        const trailLength = Math.min(rad * 2.4, 40);
+        const trailAngle = Math.atan2(p.vy, p.vx);
+        ctx.save();
+        ctx.rotate(trailAngle);
+
+        const trailGrad = ctx.createLinearGradient(-trailLength, 0, 0, 0);
+        trailGrad.addColorStop(0, 'rgba(250, 204, 21, 0)');
+        trailGrad.addColorStop(0.6, glowColor);
+        trailGrad.addColorStop(1, 'rgba(255, 255, 255, 0.9)');
+        ctx.fillStyle = trailGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, -rad * 0.45);
+        ctx.lineTo(-trailLength, 0);
+        ctx.lineTo(0, rad * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 3. Warm fiery outer glow halo (High contrast against navy/cyan background)
+      ctx.fillStyle = glowColor;
       ctx.beginPath();
-      ctx.arc(0, 0, rad * 1.5, 0, Math.PI * 2);
+      ctx.arc(0, 0, rad * 1.6, 0, Math.PI * 2);
       ctx.fill();
 
-      // 2. Vibrant electric cyan-blue body
-      ctx.fillStyle = '#00e5ff';
+      // 4. Saturated golden/orange body
+      ctx.fillStyle = bodyColor;
       ctx.beginPath();
-      ctx.arc(0, 0, rad, 0, Math.PI * 2);
+      ctx.arc(0, 0, rad * 0.9, 0, Math.PI * 2);
       ctx.fill();
 
-      // 3. Ultra-bright white-hot core
+      // 5. Ultra-bright white-hot core
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(0, 0, rad * 0.45, 0, Math.PI * 2);
