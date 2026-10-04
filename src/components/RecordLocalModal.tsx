@@ -6,9 +6,10 @@ import { sound } from '../game/audio';
 interface Props {
   stats: PlayerStats;
   onClose: () => void;
+  onOpenOnlineRanking?: () => void;
 }
 
-export const RecordLocalModal: React.FC<Props> = ({ stats, onClose }) => {
+export const RecordLocalModal: React.FC<Props> = ({ stats, onClose, onOpenOnlineRanking }) => {
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-between p-4 bg-slate-950/95 backdrop-blur-md text-white font-sans select-none overflow-y-auto">
       {/* Header */}
@@ -70,6 +71,19 @@ export const RecordLocalModal: React.FC<Props> = ({ stats, onClose }) => {
             </span>
           </div>
         </div>
+
+        {onOpenOnlineRanking && (
+          <button
+            onClick={() => {
+              sound.playClick();
+              onOpenOnlineRanking();
+            }}
+            className="w-full py-2.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-400/50 rounded-2xl text-xs font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
+          >
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>VER RANKING GLOBAL ONLINE</span>
+          </button>
+        )}
       </div>
 
       <div className="text-center text-[11px] text-cyan-400/60 uppercase tracking-widest font-mono">

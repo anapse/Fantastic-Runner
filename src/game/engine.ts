@@ -168,24 +168,36 @@ export class GameEngine {
   public stop() {
     if (this.animFrameReq) {
       cancelAnimationFrame(this.animFrameReq);
+      this.animFrameReq = 0;
     }
     sound.stopBGM();
   }
 
   private loop = (currentTime: number) => {
-    const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
-    this.lastTime = currentTime;
-
-    if (!this.isGameOver) {
-      this.update(dt);
-      this.render();
-      this.animFrameReq = requestAnimationFrame(this.loop);
-    } else {
+    if (this.isGameOver) {
       this.render();
       if (this.onUIUpdate) {
         this.onUIUpdate();
       }
+      return;
     }
+
+    const dt = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+    this.lastTime = currentTime;
+
+    this.update(dt);
+    this.render();
+
+    // If update triggered Game Over, perform final render, notify UI and halt loop
+    if (this.isGameOver) {
+      if (this.onUIUpdate) {
+        this.onUIUpdate();
+      }
+      return;
+    }
+
+    // Schedule next frame only if game is still active
+    this.animFrameReq = requestAnimationFrame(this.loop);
   };
 
   /* ========================================================================
@@ -193,6 +205,8 @@ export class GameEngine {
      ======================================================================== */
 
   private update(dt: number) {
+    if (this.isGameOver) return;
+
     // 1. Distance & Difficulty Scaling
     const speedMultiplier = this.player.isDashing ? 2.2 : 1.0;
     const currentSpeed = this.worldSpeed * speedMultiplier;
@@ -434,6 +448,7 @@ export class GameEngine {
           ep.active = false;
           this.damagePlayer('ENEMY_SHOT');
           this.addExplosion(this.player.x, this.player.y + 35, 10, 'IMPACT');
+          if (this.isGameOver) break;
         }
       }
     }
@@ -461,7 +476,7 @@ export class GameEngine {
       }
     }
 
-    if (this.onUIUpdate) {
+    if (!this.isGameOver && this.onUIUpdate) {
       this.onUIUpdate();
     }
   }
@@ -635,6 +650,7 @@ export class GameEngine {
      ======================================================================== */
 
   private checkPlayerEntityCollision(ent: GameObject) {
+    if (this.isGameOver) return;
     if (!ent.active) return;
 
     // Depth check: Player is near Z=0 (10 to -20)
@@ -714,6 +730,7 @@ export class GameEngine {
   }
 
   private damagePlayer(_source: string) {
+    if (this.isGameOver) return;
     if (this.player.invulnerableTimer > 0) return;
 
     // Shield powerup absorbs hit
@@ -725,12 +742,9 @@ export class GameEngine {
     }
 
     this.player.lives -= 1;
-    this.player.invulnerableTimer = 1.8;
-    this.player.animState = 'DAMAGE';
-    sound.playDamage();
 
     if (this.player.lives <= 0) {
-      console.log('PLAYER LIVES REACHED 0 - GAME OVER TRIGGERED', { lives: this.player.lives, isGameOver: this.isGameOver });
+      this.player.lives = 0;
       this.isGameOver = true;
       this.player.animState = 'DEATH';
       sound.playExplosion(true);
@@ -738,7 +752,12 @@ export class GameEngine {
       if (this.onUIUpdate) {
         this.onUIUpdate();
       }
+      return;
     }
+
+    this.player.invulnerableTimer = 1.8;
+    this.player.animState = 'DAMAGE';
+    sound.playDamage();
   }
 
   private spawnRandomEntities() {

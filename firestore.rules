@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for validating RankingEntry
+    function isValidRankingEntry(data) {
+      return data.keys().hasAll(['playerName', 'score']) &&
+             data.keys().hasOnly(['playerName', 'score', 'distance', 'kills', 'coins', 'gems', 'createdAt']) &&
+             data.playerName is string &&
+             data.playerName.size() >= 1 &&
+             data.playerName.size() <= 50 &&
+             data.score is number &&
+             data.score >= 0 &&
+             data.score <= 1000000000 &&
+             (!('distance' in data) || (data.distance is number && data.distance >= 0)) &&
+             (!('kills' in data) || (data.kills is number && data.kills >= 0)) &&
+             (!('coins' in data) || (data.coins is number && data.coins >= 0)) &&
+             (!('gems' in data) || (data.gems is number && data.gems >= 0)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64));
+    }
+
+    // Fantastic-Runner Ranking collection
+    match /ranking/{entryId} {
+      // Anyone can read ranking to display the global leaderboard
+      allow read: if true;
+
+      // Anyone can submit a valid game score when completing a run
+      allow create: if isValidRankingEntry(request.resource.data);
+
+      // Scores are immutable: no modifications or deletions from visitors
+      allow update, delete: if false;
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

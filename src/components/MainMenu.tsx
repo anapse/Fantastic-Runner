@@ -13,6 +13,7 @@ interface Props {
   onOpenContact: () => void;
   onOpenHowToPlay: () => void;
   onOpenRecord: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export const MainMenu: React.FC<Props> = ({
@@ -23,6 +24,7 @@ export const MainMenu: React.FC<Props> = ({
   onOpenContact,
   onOpenHowToPlay,
   onOpenRecord,
+  onOpenAdmin,
 }) => {
   const isMuted = !stats.settings.soundFx && !stats.settings.music;
 
@@ -40,7 +42,7 @@ export const MainMenu: React.FC<Props> = ({
         <div className="absolute inset-0 bg-[#060c18]/45 backdrop-blur-[2px]" />
       </div>
 
-      {/* 2. TOP BAR: CONTÁCTANOS (LEFT) & SOUND TOGGLE (RIGHT) (Matching Phone 1) */}
+      {/* 2. TOP BAR: CONTÁCTANOS (LEFT) & SOUND / ADMIN (RIGHT) */}
       <div className="flex items-center justify-between w-full z-20 pt-1">
         {/* CONTÁCTANOS Pill Button */}
         <button
@@ -56,20 +58,35 @@ export const MainMenu: React.FC<Props> = ({
           </span>
         </button>
 
-        {/* SOUND TOGGLE Rounded Button */}
-        <button
-          onClick={() => {
-            sound.playClick();
-            onToggleSound();
-          }}
-          className="bg-[#0b1c38]/90 hover:bg-[#122e5a] active:scale-95 border border-cyan-400/70 p-1.5 rounded-xl text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)] cursor-pointer transition-all"
-        >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4 text-red-400" />
-          ) : (
-            <Volume2 className="w-4 h-4 text-cyan-300" />
+        {/* ADMIN & SOUND TOGGLES */}
+        <div className="flex items-center gap-1.5">
+          {onOpenAdmin && (
+            <button
+              onClick={() => {
+                sound.playClick();
+                onOpenAdmin();
+              }}
+              title="Dashboard Administrativo (/admin)"
+              className="bg-[#0b1c38]/90 hover:bg-[#122e5a] active:scale-95 border border-amber-500/50 p-1.5 rounded-xl text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.25)] cursor-pointer transition-all text-[10px] font-mono font-bold"
+            >
+              /admin
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              onToggleSound();
+            }}
+            className="bg-[#0b1c38]/90 hover:bg-[#122e5a] active:scale-95 border border-cyan-400/70 p-1.5 rounded-xl text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.3)] cursor-pointer transition-all"
+          >
+            {isMuted ? (
+              <VolumeX className="w-4 h-4 text-red-400" />
+            ) : (
+              <Volume2 className="w-4 h-4 text-cyan-300" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 3. CENTER EMBLEM: OFFICIAL GAME LOGO (Image 1) */}

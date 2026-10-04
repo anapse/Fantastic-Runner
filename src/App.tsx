@@ -14,6 +14,7 @@ import { GameOverModal } from './components/GameOverModal';
 import { ComoJugarModal } from './components/ComoJugarModal';
 import { RecordLocalModal } from './components/RecordLocalModal';
 import { ContactanosModal } from './components/ContactanosModal';
+import { AdminDashboard } from './components/AdminDashboard';
 
 import { GameEngine } from './game/engine';
 import { GameMode, PlayerStats } from './game/types';
@@ -25,7 +26,66 @@ export default function App() {
   const [gameMode, setGameMode] = useState<GameMode>('MENU');
   const [, setRenderTrigger] = useState(0);
 
+  // Administrative /admin route detection
+  const [currentRoute, setCurrentRoute] = useState<'GAME' | 'ADMIN'>(() => {
+    if (typeof window === 'undefined') return 'GAME';
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    const search = new URLSearchParams(window.location.search);
+    if (
+      path.includes('/admin') ||
+      hash.includes('/admin') ||
+      hash.includes('#admin') ||
+      search.get('page') === 'admin' ||
+      search.get('view') === 'admin'
+    ) {
+      return 'ADMIN';
+    }
+    return 'GAME';
+  });
+
   const engineRef = useRef<GameEngine | null>(null);
+  const gameOverHandledRef = useRef<boolean>(false);
+
+  // Listen to browser history navigation (/admin vs /)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      const search = new URLSearchParams(window.location.search);
+      if (
+        path.includes('/admin') ||
+        hash.includes('/admin') ||
+        hash.includes('#admin') ||
+        search.get('page') === 'admin' ||
+        search.get('view') === 'admin'
+      ) {
+        setCurrentRoute('ADMIN');
+      } else {
+        setCurrentRoute('GAME');
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  const navigateToAdmin = () => {
+    if (engineRef.current) {
+      engineRef.current.stop();
+    }
+    window.history.pushState(null, '', '/admin');
+    setCurrentRoute('ADMIN');
+  };
+
+  const navigateToGame = () => {
+    window.history.pushState(null, '', '/');
+    setCurrentRoute('GAME');
+  };
 
   // Initialize Sound Settings
   useEffect(() => {
@@ -34,8 +94,12 @@ export default function App() {
 
   // Handle Game Over / Save Progress
   const handleGameOver = () => {
+    if (gameOverHandledRef.current) return;
+    gameOverHandledRef.current = true;
+
     if (!engineRef.current) return;
     const eng = engineRef.current;
+    eng.stop();
 
     const newCoins = stats.coins + eng.coinsCollected;
     const newDistance = stats.totalDistance + eng.distance;
@@ -53,7 +117,7 @@ export default function App() {
     setStats(updatedStats);
     savePlayerStats(updatedStats);
 
-    // Add to leaderboard
+    // Add to local backup leaderboard
     addLeaderboardScore({
       playerName: stats.selectedCharacter === 'HERO_LEO' ? 'Leo Runner' : 'Aventurero',
       score: eng.score,
@@ -61,7 +125,6 @@ export default function App() {
       coins: eng.coinsCollected,
     });
 
-    eng.stop();
     setGameMode('GAMEOVER');
   };
 
@@ -69,12 +132,12 @@ export default function App() {
   const handleUIUpdate = () => {
     setRenderTrigger((prev) => (prev + 1) % 1000);
     if (engineRef.current?.isGameOver && gameMode === 'PLAYING') {
-      console.log('APP HANDLE UI UPDATE - GAME OVER DETECTED', { isGameOver: engineRef.current?.isGameOver, gameMode });
       handleGameOver();
     }
   };
 
   const handleStartGame = () => {
+    gameOverHandledRef.current = false;
     if (!engineRef.current) {
       const dummyCanvas = document.createElement('canvas');
       dummyCanvas.width = 450;
@@ -103,10 +166,12 @@ export default function App() {
   };
 
   const handleRestart = () => {
+    gameOverHandledRef.current = false;
     handleStartGame();
   };
 
   const handleExitToMenu = () => {
+    gameOverHandledRef.current = false;
     if (engineRef.current) {
       engineRef.current.stop();
       engineRef.current.reset(stats);
@@ -133,6 +198,11 @@ export default function App() {
     handleUpdateStats(newStats);
   };
 
+  // If visiting /admin, render the full Administrative Dashboard
+  if (currentRoute === 'ADMIN') {
+    return <AdminDashboard onBackToGame={navigateToGame} />;
+  }
+
   return (
     <ViewportContainer>
       {/* 3D Depth Canvas Layer */}
@@ -155,6 +225,7 @@ export default function App() {
           onOpenContact={() => setGameMode('CONTACT')}
           onOpenHowToPlay={() => setGameMode('HOW_TO_PLAY')}
           onOpenRecord={() => setGameMode('RECORD_LOCAL')}
+          onOpenAdmin={navigateToAdmin}
         />
       )}
 
@@ -168,7 +239,11 @@ export default function App() {
       )}
 
       {gameMode === 'RECORD_LOCAL' && (
-        <RecordLocalModal stats={stats} onClose={() => setGameMode('MENU')} />
+        <RecordLocalModal
+          stats={stats}
+          onClose={() => setGameMode('MENU')}
+          onOpenOnlineRanking={() => setGameMode('RANKING')}
+        />
       )}
 
       {gameMode === 'RANKING' && (
@@ -229,6 +304,7 @@ export default function App() {
           engine={engineRef.current}
           onRestart={handleRestart}
           onExitToMenu={handleExitToMenu}
+          onOpenRanking={() => setGameMode('RANKING')}
         />
       )}
     </ViewportContainer>

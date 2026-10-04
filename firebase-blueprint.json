@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "RankingEntry": {
+      "title": "RankingEntry",
+      "description": "A score entry in the ranking collection for Fantastic-Runner",
+      "type": "object",
+      "properties": {
+        "playerName": {
+          "type": "string",
+          "description": "Name of the player",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "score": {
+          "type": "number",
+          "description": "Final score achieved in the game run"
+        },
+        "distance": {
+          "type": "number",
+          "description": "Distance in meters reached during the run"
+        },
+        "kills": {
+          "type": "number",
+          "description": "Total enemies or obstacles destroyed"
+        },
+        "coins": {
+          "type": "number",
+          "description": "Coins collected during the run"
+        },
+        "gems": {
+          "type": "number",
+          "description": "Gems collected during the run"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of when the score was recorded"
+        }
+      },
+      "required": [
+        "playerName",
+        "score"
+      ]
+    }
+  },
+  "firestore": {
+    "/ranking/{entryId}": {
+      "schema": "RankingEntry",
+      "description": "Global ranking scores for Fantastic-Runner ordered by score descending"
+    }
+  }
+}

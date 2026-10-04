@@ -48,21 +48,50 @@ describe('GameEngine - Game Over & Lives Test', () => {
     const uiUpdateSpy = vi.fn();
     const engine = new GameEngine(canvas, DEFAULT_STATS, uiUpdateSpy);
 
-    // Inflict damage 3 times to drain all lives
+    // Inflict damage 1: lives 3 -> 2
     (engine as any).player.invulnerableTimer = 0;
     (engine as any).damagePlayer('OBSTACLE');
     expect(engine.player.lives).toBe(2);
     expect(engine.isGameOver).toBe(false);
 
+    // Inflict damage 2: lives 2 -> 1
     (engine as any).player.invulnerableTimer = 0;
     (engine as any).damagePlayer('OBSTACLE');
     expect(engine.player.lives).toBe(1);
     expect(engine.isGameOver).toBe(false);
 
+    // Inflict damage 3: lives 1 -> 0 (GAME OVER)
     (engine as any).player.invulnerableTimer = 0;
     (engine as any).damagePlayer('OBSTACLE');
     expect(engine.player.lives).toBe(0);
     expect(engine.isGameOver).toBe(true);
+    expect((engine as any).player.animState).toBe('DEATH');
     expect(uiUpdateSpy).toHaveBeenCalled();
+
+    // Subsequent damage should be ignored (no negative lives, no second Game Over)
+    uiUpdateSpy.mockClear();
+    (engine as any).player.invulnerableTimer = 0;
+    (engine as any).damagePlayer('OBSTACLE');
+    expect(engine.player.lives).toBe(0);
+    expect(engine.isGameOver).toBe(true);
+    expect(uiUpdateSpy).not.toHaveBeenCalled();
+  });
+
+  it('should cleanly reset lives to 3 and isGameOver to false on new run', () => {
+    const canvas = createMockCanvas();
+    const engine = new GameEngine(canvas, DEFAULT_STATS, () => {});
+
+    // Force game over
+    (engine as any).player.lives = 1;
+    (engine as any).player.invulnerableTimer = 0;
+    (engine as any).damagePlayer('OBSTACLE');
+    expect(engine.isGameOver).toBe(true);
+    expect(engine.player.lives).toBe(0);
+
+    // Reset for new game
+    engine.reset(DEFAULT_STATS);
+    expect(engine.isGameOver).toBe(false);
+    expect(engine.player.lives).toBe(3);
+    expect(engine.player.animState).toBe('RUN');
   });
 });
