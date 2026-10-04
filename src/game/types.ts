@@ -1,5 +1,6 @@
 export type GameMode =
   | 'MENU'
+  | 'NAME_INPUT'
   | 'PLAYING'
   | 'PAUSED'
   | 'GAMEOVER'
@@ -10,7 +11,6 @@ export type GameMode =
   | 'RANKING'
   | 'SETTINGS'
   | 'HOW_TO_PLAY'
-  | 'RECORD_LOCAL'
   | 'CONTACT';
 
 export type WeaponType = 'BASIC' | 'SPREAD' | 'BEAM' | 'PLASMA';

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ViewportContainer } from './components/ViewportContainer';
 import { GameCanvas } from './components/GameCanvas';
 import { HUDOverlay } from './components/HUDOverlay';
 import { MainMenu } from './components/MainMenu';
+import { NameInputModal } from './components/NameInputModal';
 import { ShopModal } from './components/ShopModal';
 import { CharacterModal } from './components/CharacterModal';
 import { PowerupsModal } from './components/PowerupsModal';
@@ -12,19 +13,38 @@ import { SettingsModal } from './components/SettingsModal';
 import { PauseModal } from './components/PauseModal';
 import { GameOverModal } from './components/GameOverModal';
 import { ComoJugarModal } from './components/ComoJugarModal';
-import { RecordLocalModal } from './components/RecordLocalModal';
 import { ContactanosModal } from './components/ContactanosModal';
 import { AdminDashboard } from './components/AdminDashboard';
 
 import { GameEngine } from './game/engine';
 import { GameMode, PlayerStats } from './game/types';
-import { loadPlayerStats, savePlayerStats, addLeaderboardScore } from './game/storage';
+import { loadPlayerStats, savePlayerStats } from './game/storage';
+import { saveScoreToRanking } from './game/firebase';
 import { sound } from './game/audio';
 
 export default function App() {
   const [stats, setStats] = useState<PlayerStats>(() => loadPlayerStats());
   const [gameMode, setGameMode] = useState<GameMode>('MENU');
   const [, setRenderTrigger] = useState(0);
+
+  // Current session player name
+  const [playerName, setPlayerName] = useState<string>(() => {
+    return localStorage.getItem('fantastic_runner_player_name') || '';
+  });
+
+  // Stale-closure immune references
+  const engineRef = useRef<GameEngine | null>(null);
+  const gameOverHandledRef = useRef<boolean>(false);
+  const gameModeRef = useRef<GameMode>(gameMode);
+  const playerNameRef = useRef<string>(playerName);
+
+  useEffect(() => {
+    gameModeRef.current = gameMode;
+  }, [gameMode]);
+
+  useEffect(() => {
+    playerNameRef.current = playerName;
+  }, [playerName]);
 
   // Administrative /admin route detection
   const [currentRoute, setCurrentRoute] = useState<'GAME' | 'ADMIN'>(() => {
@@ -43,9 +63,6 @@ export default function App() {
     }
     return 'GAME';
   });
-
-  const engineRef = useRef<GameEngine | null>(null);
-  const gameOverHandledRef = useRef<boolean>(false);
 
   // Listen to browser history navigation (/admin vs /)
   useEffect(() => {
@@ -92,8 +109,8 @@ export default function App() {
     sound.setSettings(stats.settings.soundFx, stats.settings.music, stats.settings.volume);
   }, [stats.settings]);
 
-  // Handle Game Over / Save Progress
-  const handleGameOver = () => {
+  // Handle Game Over / Save Progress (Strict Single Execution)
+  const handleGameOver = useCallback(() => {
     if (gameOverHandledRef.current) return;
     gameOverHandledRef.current = true;
 
@@ -101,43 +118,58 @@ export default function App() {
     const eng = engineRef.current;
     eng.stop();
 
-    const newCoins = stats.coins + eng.coinsCollected;
-    const newDistance = stats.totalDistance + eng.distance;
-    const newKills = stats.totalKills + eng.killsCount;
-    const newHighScore = Math.max(stats.highScore, eng.score);
+    const finalScore = eng.score;
+    const finalDistance = Math.floor(eng.distance);
+    const finalKills = eng.killsCount;
+    const finalCoins = eng.coinsCollected;
 
-    const updatedStats: PlayerStats = {
-      ...stats,
-      coins: newCoins,
-      totalDistance: newDistance,
-      totalKills: newKills,
-      highScore: newHighScore,
-    };
-
-    setStats(updatedStats);
-    savePlayerStats(updatedStats);
-
-    // Add to local backup leaderboard
-    addLeaderboardScore({
-      playerName: stats.selectedCharacter === 'HERO_LEO' ? 'Leo Runner' : 'Aventurero',
-      score: eng.score,
-      distance: Math.floor(eng.distance),
-      coins: eng.coinsCollected,
+    // Update persistent player stats
+    setStats((prevStats) => {
+      const updatedStats: PlayerStats = {
+        ...prevStats,
+        coins: prevStats.coins + finalCoins,
+        totalDistance: prevStats.totalDistance + finalDistance,
+        totalKills: prevStats.totalKills + finalKills,
+        highScore: Math.max(prevStats.highScore, finalScore),
+      };
+      savePlayerStats(updatedStats);
+      return updatedStats;
     });
 
+    // Save official record to Firebase Firestore ranking ONCE
+    const activePlayerName = playerNameRef.current.trim() || 'Jugador';
+    if (finalScore > 0) {
+      saveScoreToRanking({
+        playerName: activePlayerName,
+        score: finalScore,
+        distance: finalDistance,
+        kills: finalKills,
+        coins: finalCoins,
+      }).catch((err) => {
+        console.error('Error saving score to Firebase:', err);
+      });
+    }
+
     setGameMode('GAMEOVER');
-  };
+  }, []);
 
   // UI Force Re-render Callback from Engine
-  const handleUIUpdate = () => {
+  // Stale-closure immune: directly evaluates engine.isGameOver
+  const handleUIUpdate = useCallback(() => {
     setRenderTrigger((prev) => (prev + 1) % 1000);
-    if (engineRef.current?.isGameOver && gameMode === 'PLAYING') {
+    if (engineRef.current?.isGameOver) {
       handleGameOver();
     }
-  };
+  }, [handleGameOver]);
 
-  const handleStartGame = () => {
+  const handleStartGame = (nameToUse?: string) => {
     gameOverHandledRef.current = false;
+    const resolvedName = (nameToUse || playerNameRef.current).trim();
+    if (resolvedName) {
+      setPlayerName(resolvedName);
+      localStorage.setItem('fantastic_runner_player_name', resolvedName);
+    }
+
     if (!engineRef.current) {
       const dummyCanvas = document.createElement('canvas');
       dummyCanvas.width = 450;
@@ -167,7 +199,8 @@ export default function App() {
 
   const handleRestart = () => {
     gameOverHandledRef.current = false;
-    handleStartGame();
+    // Show NameInputModal pre-filled with the name to confirm or change
+    setGameMode('NAME_INPUT');
   };
 
   const handleExitToMenu = () => {
@@ -220,12 +253,22 @@ export default function App() {
         <MainMenu
           stats={stats}
           onNavigate={(mode) => setGameMode(mode)}
-          onStartGame={handleStartGame}
+          onStartGame={() => setGameMode('NAME_INPUT')}
           onToggleSound={handleToggleSound}
           onOpenContact={() => setGameMode('CONTACT')}
           onOpenHowToPlay={() => setGameMode('HOW_TO_PLAY')}
-          onOpenRecord={() => setGameMode('RECORD_LOCAL')}
           onOpenAdmin={navigateToAdmin}
+        />
+      )}
+
+      {/* Pre-Game Name Input Modal */}
+      {gameMode === 'NAME_INPUT' && (
+        <NameInputModal
+          initialName={playerName}
+          onConfirm={(confirmedName) => {
+            handleStartGame(confirmedName);
+          }}
+          onCancel={() => setGameMode('MENU')}
         />
       )}
 
@@ -236,14 +279,6 @@ export default function App() {
 
       {gameMode === 'HOW_TO_PLAY' && (
         <ComoJugarModal onClose={() => setGameMode('MENU')} />
-      )}
-
-      {gameMode === 'RECORD_LOCAL' && (
-        <RecordLocalModal
-          stats={stats}
-          onClose={() => setGameMode('MENU')}
-          onOpenOnlineRanking={() => setGameMode('RANKING')}
-        />
       )}
 
       {gameMode === 'RANKING' && (
@@ -302,6 +337,7 @@ export default function App() {
       {gameMode === 'GAMEOVER' && engineRef.current && (
         <GameOverModal
           engine={engineRef.current}
+          playerName={playerName || 'Jugador'}
           onRestart={handleRestart}
           onExitToMenu={handleExitToMenu}
           onOpenRanking={() => setGameMode('RANKING')}
